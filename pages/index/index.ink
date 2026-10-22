@@ -12,6 +12,7 @@ import { askOhana } from '../../lib/hub.js';
 //   idle -> listening -> thinking -> reply -> idle
 //                                     -> error -> (retry)
 // Enter / GlobalHook (glasses touchpad confirm) = the primary action.
+// A type row is always available (stage-noise proof + simulator testing).
 export default {
   data: {
     status: 'idle',        // idle | listening | thinking | reply | error
@@ -21,6 +22,13 @@ export default {
     hint: 'tap SPEAK and ask the ʻohana',
     lang: 'en-US',         // ASR language; tap 中/EN to flip
     btn: '🎤 SPEAK',
+    typed: '',
+    // precomputed render flags (bindings here do not evaluate expressions)
+    showQ: false,
+    showLive: false,
+    showA: false,
+    langLabel: 'EN',
+    hot: false,
   },
 
   onLoad() {
@@ -31,6 +39,17 @@ export default {
 
   onUnload() { this.teardown(); },
   onHide() { this.teardown(); },
+
+  ui(patch) {
+    const p = patch || {};
+    const status = p.status !== undefined ? p.status : this.data.status;
+    p.status = status;
+    p.showQ = (p.question !== undefined ? p.question : this.data.question) !== '';
+    p.showLive = status === 'listening';
+    p.showA = (p.answer !== undefined ? p.answer : this.data.answer) !== '';
+    p.hot = status === 'listening';
+    this.setData(p);
+  },
 
   teardown() {
     this.runId += 1;
@@ -53,18 +72,18 @@ export default {
       if (t) { this.lastTranscript = t; this.setData({ liveText: t }); }
     };
     rec.onerror = (payload = {}) => {
-      this.setData({ status: 'error', btn: '↻ RETRY', hint: 'mic/ASR: ' + (payload.message || payload.key || 'failed'), liveText: '' });
+      this.ui({ status: 'error', btn: '↻ RETRY', hint: 'mic/ASR: ' + (payload.message || payload.key || 'failed'), liveText: '' });
     };
     rec.onend = () => {
       this.recognizer = null;
       const t = (this.lastTranscript || '').trim();
       if (this.data.status !== 'listening') return;          // aborted on purpose
-      if (!t) { this.setData({ status: 'idle', btn: '🎤 SPEAK', hint: 'heard nothing — tap and speak right after the dot', liveText: '' }); return; }
+      if (!t) { this.ui({ status: 'idle', btn: '🎤 SPEAK', hint: 'heard nothing — tap and speak right after the dot', liveText: '' }); return; }
       this.sendToOhana(t);
     };
     rec.onstart = () => {};
     rec.start();
-    this.setData({ status: 'listening', btn: '⏹ SEND', liveText: '', answer: '', hint: 'listening… tap SEND when done' });
+    this.ui({ status: 'listening', btn: '⏹ SEND', liveText: '', answer: '', hint: 'listening… tap SEND when done' });
   },
 
   teardownRecognizersOnly() {
@@ -77,22 +96,24 @@ export default {
 
   // ---- brain ----
   async sendToOhana(text) {
+    const t = String(text || '').trim();
+    if (!t) return;
     const myRun = ++this.runId;
-    this.setData({ status: 'thinking', question: text, liveText: '', answer: '', btn: '⏳', hint: 'thinking… a real agent is answering (20–60s)' });
+    this.ui({ status: 'thinking', question: t, liveText: '', answer: '', btn: '⏳', hint: 'thinking… a real agent is answering (20–60s)' });
     try {
-      const reply = await askOhana(text, {
+      const reply = await askOhana(t, {
         isCancelled: () => myRun !== this.runId,
         onHold: (note) => { if (myRun === this.runId) this.setData({ hint: note }); },
       });
       if (myRun !== this.runId) return;
-      this.setData({ status: 'reply', answer: reply, btn: '🎤 AGAIN', hint: 'tap AGAIN for the next question' });
+      this.ui({ status: 'reply', answer: reply, btn: '🎤 AGAIN', hint: 'tap AGAIN for the next question' });
       this.speak(reply);
     } catch (error) {
       if (myRun !== this.runId) return;
       const msg = (error && error.key === 'timeout')
         ? 'the ʻohana is still thinking — tap RETRY to check again'
         : 'the ʻohana is out of range — check the wifi, tap RETRY';
-      this.setData({ status: 'error', btn: '↻ RETRY', hint: msg });
+      this.ui({ status: 'error', btn: '↻ RETRY', hint: msg });
     }
   },
 
@@ -111,9 +132,20 @@ export default {
     this.startListening();
   },
 
+  onTyped(event) {
+    this.setData({ typed: event.detail.value });
+  },
+
+  sendTyped() {
+    const t = (this.data.typed || '').trim();
+    if (!t) return;
+    this.setData({ typed: '' });
+    this.sendToOhana(t);
+  },
+
   toggleLang() {
     const next = this.data.lang === 'en-US' ? 'zh-CN' : 'en-US';
-    this.setData({ lang: next });
+    this.setData({ lang: next, langLabel: next === 'en-US' ? 'EN' : '中' });
   },
 
   onKeyUp(event) {
@@ -126,18 +158,20 @@ export default {
   <view class="root">
     <view class="top">
       <text class="title">🌺 ʻOHANA LENS</text>
-      <button class="langbtn" bindtap="toggleLang">{{ lang === 'en-US' ? 'EN' : '中' }}</button>
+      <button class="langbtn" bindtap="toggleLang">{{ langLabel }}</button>
     </view>
 
     <scroll-view class="body" scroll-y>
-      <text class="q" wx:if="{{ question }}">YOU: {{ question }}</text>
-      <text class="live" wx:if="{{ status === 'listening' }}">{{ liveText || '…' }}</text>
-      <text class="a" wx:if="{{ answer }}">{{ answer }}</text>
+      <text class="q" wx:if="{{ showQ }}">YOU: {{ question }}</text>
+      <text class="live" wx:if="{{ showLive }}">{{ liveText || '…' }}</text>
+      <text class="a" wx:if="{{ showA }}">{{ answer }}</text>
       <text class="hint">{{ hint }}</text>
     </scroll-view>
 
     <view class="bottom">
-      <button class="primary {{ status === 'listening' ? 'hot' : '' }}" bindtap="primary">{{ btn }}</button>
+      <input class="typebox" value="{{ typed }}" placeholder="or type here…" bindinput="onTyped" />
+      <button class="sendbtn" bindtap="sendTyped">➤</button>
+      <button class="primary {{ hot ? 'hot' : '' }}" bindtap="primary">{{ btn }}</button>
     </view>
   </view>
 </page>
@@ -152,7 +186,9 @@ export default {
 .live { color: #40ff5e; font-size: 20px; line-height: 26px; display: block; }
 .a { color: rgba(64,255,94,0.72); font-size: 19px; line-height: 26px; display: block; }
 .hint { color: rgba(64,255,94,0.48); font-size: 14px; line-height: 20px; display: block; margin-top: 8px; }
-.bottom { display: flex; flex-direction: row; justify-content: center; }
-.primary { color: #40ff5e; border: 2px solid rgba(64,255,94,0.72); border-radius: 14px; padding: 8px 26px; font-size: 20px; font-weight: 700; text-align: center; }
+.bottom { display: flex; flex-direction: row; align-items: center; justify-content: center; }
+.typebox { flex: 1; color: #40ff5e; border: 1px solid rgba(64,255,94,0.24); border-radius: 12px; padding: 6px 10px; font-size: 16px; margin-right: 8px; background: rgba(64,255,94,0.06); }
+.sendbtn { color: #40ff5e; border: 1px solid rgba(64,255,94,0.48); border-radius: 12px; padding: 6px 12px; font-size: 18px; margin-right: 8px; text-align: center; }
+.primary { color: #40ff5e; border: 2px solid rgba(64,255,94,0.72); border-radius: 14px; padding: 8px 20px; font-size: 20px; font-weight: 700; text-align: center; }
 .primary.hot { color: #000000; background: #40ff5e; }
 </style>

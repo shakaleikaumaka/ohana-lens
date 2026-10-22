@@ -23,12 +23,11 @@ export default {
     lang: 'en-US',         // ASR language; tap 中/EN to flip
     btn: '🎤 SPEAK',
     typed: '',
-    // precomputed render flags (bindings here do not evaluate expressions)
-    showQ: false,
-    showLive: false,
-    showA: false,
+    // precomputed render strings (no wx:if / expression bindings in this runtime)
+    qLine: '',
+    liveLine: '',
     langLabel: 'EN',
-    hot: false,
+    btnClass: 'primary',
   },
 
   onLoad() {
@@ -43,11 +42,14 @@ export default {
   ui(patch) {
     const p = patch || {};
     const status = p.status !== undefined ? p.status : this.data.status;
+    const question = p.question !== undefined ? p.question : this.data.question;
+    const liveText = p.liveText !== undefined ? p.liveText : this.data.liveText;
     p.status = status;
-    p.showQ = (p.question !== undefined ? p.question : this.data.question) !== '';
-    p.showLive = status === 'listening';
-    p.showA = (p.answer !== undefined ? p.answer : this.data.answer) !== '';
-    p.hot = status === 'listening';
+    // precomputed render strings — this runtime does not apply wx:if in
+    // single-file pages, so empty strings are the conditional (invisible on black)
+    p.qLine = question ? ('YOU: ' + question) : '';
+    p.liveLine = status === 'listening' ? (liveText || '…') : '';
+    p.btnClass = status === 'listening' ? 'primary hot' : 'primary';
     this.setData(p);
   },
 
@@ -162,16 +164,16 @@ export default {
     </view>
 
     <scroll-view class="body" scroll-y>
-      <view wx:if="{{ showQ }}"><text class="q">YOU: {{ question }}</text></view>
-      <view wx:if="{{ showLive }}"><text class="live">{{ liveText || '…' }}</text></view>
-      <view wx:if="{{ showA }}"><text class="a">{{ answer }}</text></view>
+      <text class="q">{{ qLine }}</text>
+      <text class="live">{{ liveLine }}</text>
+      <text class="a">{{ answer }}</text>
       <text class="hint">{{ hint }}</text>
     </scroll-view>
 
     <view class="bottom">
       <input class="typebox" value="{{ typed }}" placeholder="or type here…" bindinput="onTyped" />
       <button class="sendbtn" bindtap="sendTyped">➤</button>
-      <button class="primary {{ hot ? 'hot' : '' }}" bindtap="primary">{{ btn }}</button>
+      <button class="{{ btnClass }}" bindtap="primary">{{ btn }}</button>
     </view>
   </view>
 </page>

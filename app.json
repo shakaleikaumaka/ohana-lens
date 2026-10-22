@@ -1,0 +1,16 @@
+{
+  "agentName": "Ohana",
+  "agentDesc": "Talk to the ʻohana fleet: speak → a real agent's reply on the lens + spoken. 说话→真代理回复上屏+朗读。",
+  "pages": [
+    "pages/index/index"
+  ],
+  "permissions": [
+    "RECORD_AUDIO"
+  ],
+  "window": {
+    "navigationBarTitleText": "ʻOhana Lens",
+    "viewport": {
+      "width": "device-width"
+    }
+  }
+}

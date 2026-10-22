@@ -162,9 +162,9 @@ export default {
     </view>
 
     <scroll-view class="body" scroll-y>
-      <text class="q" wx:if="{{ showQ }}">YOU: {{ question }}</text>
-      <text class="live" wx:if="{{ showLive }}">{{ liveText || '…' }}</text>
-      <text class="a" wx:if="{{ showA }}">{{ answer }}</text>
+      <view wx:if="{{ showQ }}"><text class="q">YOU: {{ question }}</text></view>
+      <view wx:if="{{ showLive }}"><text class="live">{{ liveText || '…' }}</text></view>
+      <view wx:if="{{ showA }}"><text class="a">{{ answer }}</text></view>
       <text class="hint">{{ hint }}</text>
     </scroll-view>
 
